@@ -12,8 +12,17 @@ class ApiService
 
     public function __construct()
     {
-        $this->baseUrl = config('api.base_url');
+        // FIX: rapikan base URL (hilangkan slash double)
+        $this->baseUrl = rtrim(config('api.base_url'), '/');
         $this->timeout = config('api.timeout');
+    }
+
+    /**
+     * FIX: fungsi untuk menggabungkan URL tanpa double slash atau double /api
+     */
+    private function buildUrl($endpoint)
+    {
+        return $this->baseUrl . '/' . ltrim($endpoint, '/');
     }
 
     /**
@@ -52,7 +61,7 @@ class ApiService
         try {
             $response = Http::withHeaders($this->getHeaders($includeAuth))
                 ->timeout($this->timeout)
-                ->get($this->baseUrl . $endpoint, $params);
+                ->get($this->buildUrl($endpoint), $params); // FIX
 
             return $this->handleResponse($response);
         } catch (\Exception $e) {
@@ -72,7 +81,7 @@ class ApiService
         try {
             $response = Http::withHeaders($this->getHeaders($includeAuth))
                 ->timeout($this->timeout)
-                ->post($this->baseUrl . $endpoint, $data);
+                ->post($this->buildUrl($endpoint), $data); // FIX
 
             return $this->handleResponse($response);
         } catch (\Exception $e) {
@@ -92,7 +101,7 @@ class ApiService
         try {
             $response = Http::withHeaders($this->getHeaders($includeAuth))
                 ->timeout($this->timeout)
-                ->put($this->baseUrl . $endpoint, $data);
+                ->put($this->buildUrl($endpoint), $data); // FIX
 
             return $this->handleResponse($response);
         } catch (\Exception $e) {
@@ -112,7 +121,7 @@ class ApiService
         try {
             $response = Http::withHeaders($this->getHeaders($includeAuth))
                 ->timeout($this->timeout)
-                ->delete($this->baseUrl . $endpoint, $data);
+                ->delete($this->buildUrl($endpoint), $data); // FIX
 
             return $this->handleResponse($response);
         } catch (\Exception $e) {
@@ -132,13 +141,11 @@ class ApiService
         $statusCode = $response->status();
         $body = $response->json();
 
-        // Log untuk debugging
         Log::info('API Response', [
             'status' => $statusCode,
             'body' => $body
         ]);
 
-        // Jika response null, kembalikan error yang informatif
         if (is_null($body)) {
             Log::error('API returned null response', [
                 'status' => $statusCode,
@@ -151,12 +158,14 @@ class ApiService
             ];
         }
 
-        // Return response body
         return $body;
     }
 
+
     /**
-     * Shortcut methods untuk endpoint spesifik
+     * =====================================================
+     *                SHORTCUT ENDPOINTS
+     * =====================================================
      */
 
     // Auth
