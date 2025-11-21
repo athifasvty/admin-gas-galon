@@ -65,17 +65,30 @@ class PesananController extends Controller
     }
 
     /**
-     * Assign kurir ke pesanan
+     * Assign kurir ke pesanan (manual atau auto)
      */
     public function assignKurir(Request $request, $id)
     {
-        $request->validate([
-            'id_kurir' => 'required|integer',
-        ]);
+        $id_kurir = null;
+
+        // Jika ada id_kurir di request, gunakan itu
+        if ($request->has('id_kurir') && !empty($request->id_kurir)) {
+            $request->validate([
+                'id_kurir' => 'required|integer',
+            ]);
+            $id_kurir = $request->id_kurir;
+        } else {
+            // Auto-assign: cari kurir yang free (tidak sedang mengirim)
+            $id_kurir = $this->getAvailableKurir();
+            
+            if (!$id_kurir) {
+                return back()->with('error', 'Tidak ada kurir yang tersedia saat ini');
+            }
+        }
 
         $response = $this->apiService->updatePesanan([
             'id' => $id,
-            'id_kurir' => $request->id_kurir,
+            'id_kurir' => $id_kurir,
         ]);
 
         if (!$response['success']) {
@@ -83,6 +96,47 @@ class PesananController extends Controller
         }
 
         return back()->with('success', 'Kurir berhasil di-assign');
+    }
+
+    /**
+     * Get available kurir (yang tidak sedang mengirim)
+     */
+    private function getAvailableKurir()
+    {
+        // Get semua kurir
+        $kurirResponse = $this->apiService->getKurir();
+        
+        if (!$kurirResponse['success'] || empty($kurirResponse['data'])) {
+            return null;
+        }
+
+        $kurir_list = $kurirResponse['data'];
+
+        // Get semua pesanan yang sedang diproses atau dikirim
+        $pesananDiprosesResponse = $this->apiService->getPesanan(null, ['status' => 'diproses']);
+        $pesananDikirimResponse = $this->apiService->getPesanan(null, ['status' => 'dikirim']);
+        
+        $pesanan_busy = array_merge(
+            $pesananDiprosesResponse['success'] ? $pesananDiprosesResponse['data'] : [],
+            $pesananDikirimResponse['success'] ? $pesananDikirimResponse['data'] : []
+        );
+
+        // Kumpulkan ID kurir yang sedang handle pesanan
+        $kurir_busy = [];
+        foreach ($pesanan_busy as $pesanan) {
+            if (!empty($pesanan['id_kurir'])) {
+                $kurir_busy[] = $pesanan['id_kurir'];
+            }
+        }
+
+        // Cari kurir yang free
+        foreach ($kurir_list as $kurir) {
+            if (!in_array($kurir['id'], $kurir_busy)) {
+                return $kurir['id'];
+            }
+        }
+
+        return null;
     }
 
     /**
